@@ -17,7 +17,7 @@
 #define IMG_HEIGHT 480     //
 #define GFX_BL 2           // LED BACKLIGHT
 #define OFFSETLINE 10      // pxl
-#define GFX_HZ 60          // refresh
+#define GFX_HZ 50          // refresh
 #define SPISPEED 80000000  // 80 MHz
 
 
@@ -188,10 +188,15 @@ void buildGrid() {
   gfx->drawRect(0, 40, w, 80, GREEN);
 
   for (int i = 0; i < 7; i++) {
-    gfx->drawRect(i * (w / 7), 120, (w / 7), h - 120, GREEN);  // each hive + 1 meteo
+    if (i == 6) {
+      gfx->drawRect(i * (w / 7), 120, (w / 7) + 2, h - 120, GREEN);
+    } else {
+      gfx->drawRect(i * (w / 7), 120, (w / 7), h - 120, GREEN);  // each hive + 1 meteo
+    }
   }
   char *title = "La Butinerie de Neuilly";
   WriteOnScreen((w - sizeof(title)) / 3, 12, 2, title, RED);
+  gfx->fillRect(0, 390, w, 2, GREEN);
 }
 
 void refreshdata() {
@@ -230,21 +235,25 @@ void refreshdata() {
       long frelons_0_frags = long(doc["frelons"][0]["frags"]);  // 263
       char frags[20];
       sprintf(frags, "Frelons : %d", frelons_0_frags);
-      WriteOnScreen(20, 75, 4, frags, YELLOW);
+      WriteOnScreen(20, 65, 4, frags, YELLOW);
 
       // Meteo exterieur basé sur la premiere balance
-      char tempOut[8];
+      char tempOut[9];
       float tempOut_0_ObeeTwo = doc["tempOut"][0]["ObeeTwo"];
-      char humidityOut[5];
+      char humidityOut[6];
       int humidityOut_0_ObeeTwo = doc["humidityOut"][0]["ObeeTwo"];
-      char pressureOut[10];
+      char pressureOut[11];
       float pressureOut_0_ObeeTwo = doc["pressureOut"][0]["ObeeTwo"];
-      sprintf(tempOut, "T %d C ", int(tempOut_0_ObeeTwo));
-      sprintf(humidityOut, "H %d \%", humidityOut_0_ObeeTwo);
-      sprintf(pressureOut, "P %d hPa", int(pressureOut_0_ObeeTwo));
+      char alimHarpes[17];
+      float alimHarpes_ObeePowerWatch001 = doc["alimHarpes"][0]["ObeePowerWatch001"];
+      sprintf(tempOut, "T: %d\xB0C", int(tempOut_0_ObeeTwo));
+      sprintf(humidityOut, "H: %d%%", humidityOut_0_ObeeTwo);
+      sprintf(pressureOut, "P: %dhPa", int(pressureOut_0_ObeeTwo));
+      sprintf(alimHarpes, "Alim: %.1f V", alimHarpes_ObeePowerWatch001);
       WriteOnScreen(500, 51, 2, tempOut, YELLOW);
       WriteOnScreen(500, 75, 2, humidityOut, YELLOW);
       WriteOnScreen(500, 100, 2, pressureOut, YELLOW);
+      WriteOnScreen(650, 51, 2, alimHarpes, YELLOW);
 
       // Nommage Ruche
       for (int i = 0; i < 7; i++) {
@@ -288,35 +297,35 @@ void refreshdata() {
       }
       // infos Ruche 1
       char Ruche1poid[10];
-      if (doc["poid"][6]["ObeeTwo"].as<int>() > 1000) {
-        sprintf(Ruche1poid, "%d Kg", doc["poid"][6]["ObeeTwo"].as<int>() / 1000);
+      if (doc["lastPoid"][0]["ObeeTwo"].as<int>() > 1000) {
+        sprintf(Ruche1poid, "%.2f Kg", doc["lastPoid"][0]["ObeeTwo"].as<float>() / 1000);
       } else {
-        sprintf(Ruche1poid, "%d Gr", doc["poid"][6]["ObeeTwo"].as<int>());
+        sprintf(Ruche1poid, "%.0f Gr", doc["lastPoid"][0]["ObeeTwo"].as<float>());
       }
-      WriteOnScreen(15, 170, 3, Ruche1poid, YELLOW);
+      WriteOnScreen(10, 170, 2, Ruche1poid, YELLOW);
 
       float pmax = 0;
       float rmax = 100;
-      for (int i = 0; i < 7; i++) {
+      for (int i = 0; i < 8; i++) {
         if (doc["poid"][i]["ObeeTwo"].as<float>() > pmax)
           pmax = doc["poid"][i]["ObeeTwo"].as<float>();
         //Serial.println(pmax);
       }
-      for (int i = 0; i < 7; i++) {
+      for (int i = 0; i < 8; i++) {
         float level = rmax / pmax * doc["poid"][i]["ObeeTwo"].as<float>();
-        gfx->fillRect(i * (100 / 7) + 10, 305, 8, 0 - int(level), GREEN);
+        gfx->fillRect(i * (100 / 8) + 10, 305, 8, 0 - int(level), GREEN);
       }
 
-      char temp[8];
+      char temp[9];
       float temp_0_ObeeTwo = doc["temp"][0]["ObeeTwo"];
-      char tempMiel[8];
+      char tempMiel[9];
       float tempMiel_0_ObeeTwo = doc["tempMiel"][0]["ObeeTwo"];
-      char humidity[5];
+      char humidity[6];
       int humidity_0_ObeeTwo = doc["humidity"][0]["ObeeTwo"];
 
-      sprintf(temp, "T %d C ", int(tempOut_0_ObeeTwo));
-      sprintf(tempMiel, "M %d C", int(tempMiel_0_ObeeTwo));
-      sprintf(humidity, "H %d \%", humidity_0_ObeeTwo);
+      sprintf(temp, "T: %d\xB0C ", int(tempOut_0_ObeeTwo));
+      sprintf(tempMiel, "M: %d\xB0C", int(tempMiel_0_ObeeTwo));
+      sprintf(humidity, "H: %d%%", humidity_0_ObeeTwo);
       WriteOnScreen(10, 320, 2, temp, YELLOW);
       WriteOnScreen(10, 340, 2, tempMiel, YELLOW);
       WriteOnScreen(10, 360, 2, humidity, YELLOW);
@@ -342,6 +351,7 @@ void setup(void) {
   Serial.begin(115200);
   WriteLineBoot(newLineOffSet(), "booting system....");
   // identify MCU device(MAC)
+  splashScreen();
   uint64_t chipid = ESP.getEfuseMac();
   uint16_t chip = (uint16_t)(chipid >> 32);
   Serial.printf("ESP32 Chip ID = %04X", (uint16_t)(chipid >> 32));
@@ -399,7 +409,7 @@ void setup(void) {
         public_key,
         endpoint_port);*/
     }
-    splashScreen();
+
     delay(3000);  // 5 seconds
     blackScreen();
     buildGrid();
